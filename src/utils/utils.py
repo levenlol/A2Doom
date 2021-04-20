@@ -27,7 +27,7 @@ def stack_frames(stacked_frames, state, reset, stack_size=4):
     if reset:
         stacked_frames = deque([frame for i in range(stack_size)], maxlen = stack_size)
     else:
-        stack_frames.append(frame)
+        stacked_frames.append(frame)
     
     stacked_state = np.stack(stacked_frames, axis=2)
     return stacked_state, stacked_frames

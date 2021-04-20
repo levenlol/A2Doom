@@ -1,8 +1,9 @@
 import tensorflow as tf      # Deep Learning library
+import numpy as np
 
 from tensorflow.keras.layers import Input, Dense, Conv2D, BatchNormalization, Flatten, Lambda, Add, Subtract
 
-class DQNetwork:
+class ActorCriticNetwork:
     def __init__(self, state_size, action_size, learning_rate, name='DQNetwork'):
         self.state_size = state_size
         self.action_size = action_size
@@ -35,11 +36,12 @@ class DQNetwork:
         pol_act = Dense(256, activation='relu')(x)
         pol_act = Dense(action_size)(pol_act)
 
-        reduce_mean = Lambda(lambda w: tf.reduce_mean(w, axis=1, keepdims=True))
-
-        q_vals = Add()([val, Subtract()([pol_act, reduce_mean(pol_act)])])
-    
-        self.model = tf.keras.models.Model(i, q_vals)
-        self.model.compile(tf.keras.optimizers.Adam(learning_rate), loss=tf.keras.losses.Huber())
+        self.model = tf.keras.models.Model(i, (pol_act, val))
+        #self.model.compile(tf.keras.optimizers.Adam(learning_rate), loss=tf.keras.losses.Huber())
 
         self.model.summary()
+        self.hot_action = np.identity(action_size, dtype=np.int)
+
+    def get_action(self, state):
+        actions, val = self.model.predict(state.reshape((1, *state.shape)))
+        return self.hot_action[np.argmax(actions)]
