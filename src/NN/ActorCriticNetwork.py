@@ -1,10 +1,9 @@
 from collections import deque
-import tensorflow as tf  # Deep Learning library
+import tensorflow as tf      # Deep Learning library
 import numpy as np
 import utils.utils as utils
 
 from tensorflow.keras.layers import Input, Dense, Conv2D, BatchNormalization, Flatten, Lambda, Add, Subtract
-
 
 class ActorCriticNetwork:
     def __init__(self, state_size, action_size, learning_rate, name='DQNetwork'):
@@ -12,21 +11,22 @@ class ActorCriticNetwork:
         self.action_size = action_size
         self.learning_rate = learning_rate
         self.name = name
+        self.optimizer = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)
 
         # build inputs
         i = Input(shape=state_size)
 
-        # build CNN
+        #build CNN
         # 84 x 84 x 4
-        x = Conv2D(32, (8, 8), strides=[4, 4], activation='relu', padding='valid')(i)
+        x = Conv2D(32, (8, 8), strides=[4,4], activation='relu', padding='valid')(i)
         x = BatchNormalization()(x)
 
         # 20 x 20 x 32
-        x = Conv2D(64, (4, 4), strides=[2, 2], activation='relu', padding='valid')(x)
+        x = Conv2D(64, (4, 4), strides=[2,2], activation='relu', padding='valid')(x)
         x = BatchNormalization()(x)
 
         # 9 x 9 x 64
-        x = Conv2D(128, (4, 4), strides=[2, 2], activation='relu', padding='valid')(x)
+        x = Conv2D(128, (4, 4), strides=[2,2], activation='relu', padding='valid')(x)
         x = BatchNormalization()(x)
 
         # 3 x 3 x 128
@@ -40,7 +40,7 @@ class ActorCriticNetwork:
         pol_act = Dense(action_size, activation='softmax')(pol_act)
 
         self.model = tf.keras.models.Model(i, (pol_act, val))
-        # self.model.compile(tf.keras.optimizers.Adam(learning_rate), loss=tf.keras.losses.Huber())
+        #self.model.compile(tf.keras.optimizers.Adam(learning_rate), loss=tf.keras.losses.Huber())
 
         self.model.summary()
         self.hot_action = np.identity(action_size, dtype=np.int)
@@ -81,11 +81,11 @@ class ActorCriticNetwork:
                 action, actions_prob, critic_val = self.get_action(state)
 
                 reward = env.make_action(action.tolist())
-                values.append(critic_val)
+                values.append(np.squeeze(critic_val))
                 done = env.is_episode_finished()
                 rewards.append(reward)
 
-                log_prob = np.log(actions_prob * action)
+                log_prob = np.log(np.dot(actions_prob, action))
 
                 # todo check if entropy is correct.
                 entropy = -np.sum(actions_prob * np.log(actions_prob))
@@ -104,11 +104,21 @@ class ActorCriticNetwork:
                         print(f"episode: {episode}, reward: {total_rewards}")
 
             # learn
-            Q_vals = np.zeros(len(values))
-            Q_val = 0
-            for t in reversed(range(len(rewards))):
-                Q_val = rewards[t] + gamma * Q_val
-                Q_vals[t] = Q_val
+            with tf.GradientTape() as tape:
+                Q_vals = np.zeros(len(values))
+                Q_val = 0
+                for t in reversed(range(len(rewards))):
+                    Q_val = rewards[t] + gamma * Q_val
+                    Q_vals[t] = Q_val
 
-            # update actor critic
-            advantage = Q_vals - values
+                # update actor critic
+                advantage = Q_vals - values
+
+                actor_loss = - np.mean(log_probs * advantage)
+                critic_loss = 0.5 * np.mean(advantage * advantage)
+                total_loss = actor_loss + critic_loss + beta * entropy_term
+
+                gradients = tape.gradient(total_loss, self.model.trainable_variables)
+                self.optimizer.apply_gradients(zip(gradients, self.model.trainable_variables))
+
+
